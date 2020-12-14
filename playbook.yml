@@ -1,0 +1,251 @@
+---
+
+- hosts: all
+  environment:
+    LFS: /mnt/lfs
+  vars:
+    LFS: /mnt/lfs
+  become: true
+  tasks:
+
+# SETUP
+
+    - name: Declare $LFS environment variable for root
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export LFS=/mnt/lfs'
+
+    - name: Declare $LFS environment variable for vagrant
+      lineinfile:
+        path: /home/vagrant/.bashrc
+        line: 'export LFS=/mnt/lfs'
+        owner: vagrant
+
+    - name: Install basic packages
+      apt:
+        name:
+          - 'acl'
+          - 'binutils'
+          - 'bison'
+          - 'bzip2'
+          - 'coreutils'
+          - 'diffutils'
+          - 'findutils'
+          - 'gawk'
+          - 'gcc'
+          - 'libc-bin'
+          - 'grep'
+          - 'gzip'
+          - 'm4'
+          - 'make'
+          - 'patch'
+          - 'perl'
+          - 'python3'
+          - 'sed'
+          - 'tar'
+          - 'texinfo'
+          - 'xz-utils'
+          - 'g++'
+          - 'g++-multilib'
+          - 'fdisk'
+          - 'parted'
+        update_cache: true
+        state: present
+
+    - name: Symlink /bin/sh -> /bin/bash
+      file:
+        dest: /bin/sh
+        src: /usr/bin/bash
+        state: link
+        force: yes
+    
+    - name: Create the lfs group
+      group:
+        name: lfs
+        state: present
+
+    - name: Create the user lfs
+      user:
+        name: lfs
+        password: "$6$LZzqIKI.cCXW.FHQ$ZomQUgjEi.lJ5Ih9blph2Aau3D3gQuYF9YPyDL3LoY/hJlaxwCsl74pwRKLyoWZWpv947mduPGcUdZgwlMeTT."
+        group: lfs
+        shell: "/bin/bash"
+        generate_ssh_key: yes
+        state: present
+
+    - name: Change ssh settings to allow password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: 'PasswordAuthentication no'
+        line: PasswordAuthentication yes
+
+    - name: Set the bash_profile for user lfs
+      lineinfile:
+        path: /home/lfs/.bash_profile
+        create: true
+        line: exec env -i HOME=$HOME TERM=$TERM PS1='\u:\w\$ ' /bin/bash
+        owner: lfs
+        group: lfs
+    
+    - name: Remove the bashrc for user lfs
+      file:
+        path: /home/lfs/.bashrc
+        state: absent
+
+    - name: Create the new clean bashrc for user lfs
+      blockinfile:
+        path: /home/lfs/.bashrc
+        create: true
+        block: |
+          set +h
+          umask 022
+          LFS=/mnt/lfs
+          LC_ALL=POSIX
+          LFS_TGT=$(uname -m)-lfs-linux-gnu
+          PATH=/usr/bin
+          if [ ! -L /bin ]; then PATH=/bin:$PATH; fi
+          PATH=$PATH:$LFS/tools/bin
+          export LFS LC_ALL LFS_TGT PATH
+        owner: lfs
+        group: lfs
+
+    - name: Create the root LFS partition on /dev/sda3
+      community.general.parted:
+        device: /dev/sda
+        number: 3
+        fs_type: ext4
+        part_start: -45GB
+        part_end: -5GB
+        state: present
+      register: partition
+    
+    - name: Create a ext4 filesystem on /dev/sda3
+      community.general.filesystem:
+        fstype: ext4
+        dev: /dev/sda3
+    
+    - name: Create the /boot partition on /dev/sda4
+      community.general.parted:
+        device: /dev/sda
+        number: 4
+        fs_type: ext4
+        part_start: -5GB
+        state: present
+      register: partition
+    
+    - name: Create a ext4 filesystem on /dev/sda4
+      community.general.filesystem:
+        fstype: ext4
+        dev: /dev/sda4
+
+    - name: Reboot for the partitions
+      reboot:
+      when: partition.changed
+
+    - name: Create the {{ LFS }} directory for mountpoint
+      file:
+        path: "{{ LFS }}"
+        state: directory
+        owner: lfs
+        group: lfs
+
+    - name: Mount lfs root volume
+      ansible.posix.mount:
+        path: "{{ LFS }}"
+        src: /dev/sda3
+        state: mounted
+        fstype: ext4
+
+    - name: Mount lfs /boot volume
+      ansible.posix.mount:
+        path: "{{ LFS }}/boot"
+        src: /dev/sda4
+        state: mounted
+        fstype: ext4
+
+    - name: Set owner lfs /boot volume
+      file:
+        path: "{{ LFS }}/boot"
+        state: directory
+        owner: lfs
+        group: lfs
+
+    - name: Create directory {{ LFS }}/sources
+      file:
+        path: "{{ LFS }}/sources"
+        state: directory
+        owner: lfs
+        group: lfs
+        mode: "a+wt"
+
+    - name: Remove directory {{ LFS }}/lost+found
+      file:
+        path: "{{ LFS }}/lost+found"
+        state: absent
+
+    - name: Find packages for copy
+      find:
+        paths: "{{ LFS }}/sources"
+        patterns: '*'
+      register: find_packages
+
+    - name: Copy packages sources from shared folder to {{ LFS }}/sources
+      shell: "cp /vagrant/packages-sources/* {{ LFS }}/sources && chown lfs:lfs {{ LFS }}/sources/*"
+      when: not find_packages.matched
+  
+    - name: Find packages for extraction
+      find:
+        paths: "{{ LFS }}/sources"
+        patterns: '*.tar.*'
+      register: packages_archives
+
+    - name: Extract packages on {{ LFS }}/sources
+      unarchive:
+        src: "{{ item.path }}"
+        dest: "{{ LFS }}/sources"
+        remote_src: yes
+        owner: lfs
+        group: lfs
+        extra_opts: --one-top-level
+      when:
+        - packages_archives
+      loop: "{{ packages_archives.files | flatten(levels=1) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      become_user: lfs
+      register: extract_packages
+
+    - name: Remove/clean tar archives
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      when: packages_archives
+      loop: "{{ packages_archives.files | flatten(levels=1) }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when: extract_packages
+
+    - name : Check if /etc/bash.bashrc exist
+      stat:
+        path: /etc/bash.bashrc
+      register: etc_bashrc
+
+    - name: rename /etc/bash.bashrc -> /etc/bash.bashrc.NOUSE if exist
+      shell: "mv /etc/bash.bashrc /etc/bash.bashrc.NOUSE"
+      when: etc_bashrc.stat.exists
+
+    - name: Create starting directories on {{ LFS }}
+      file:
+        path: "{{ LFS }}/{{ item }}"
+        state: directory
+        group: lfs
+        owner: lfs
+      with_items: [bin, etc, lib, lib64, sbin, usr, var, tools]
+
+    - name: Create log file on {{ LFS }}
+      file:
+        path: "{{ LFS }}/lfs.log"
+        state: touch
+        mode: u=rwx,g=rwx,o=rwx
+        group: lfs
+        owner: lfs

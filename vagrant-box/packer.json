@@ -1,0 +1,21 @@
+{
+    "builders": [
+        {
+            "name": "amd64-virtualbox",
+            "type": "virtualbox-vm",
+            "vm_name": "ft_linux",
+            "communicator": "ssh",
+            "ssh_username": "root",
+            "ssh_password": "toor",
+            "guest_additions_mode": "disable"
+        }
+    ],
+    "post-processors": [
+        {
+            "type": "vagrant",
+            "output": "ft_linux-{{.BuildName}}.box",
+            "vagrantfile_template": "./PackerVagrantfile",
+            "compression_level": 9
+        }
+    ]
+}

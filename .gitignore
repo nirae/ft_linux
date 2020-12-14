@@ -1,0 +1,7 @@
+packages-sources
+backup
+*.ova
+packer_cache
+.vagrant
+*.box
+output-*

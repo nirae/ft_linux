@@ -1,0 +1,18 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+    config.vm.box = "ft_linux"
+
+    config.vm.guest = :linux
+
+    config.ssh.username = "root"
+    config.ssh.password = "toor"
+
+    config.vm.synced_folder ".", "/vagrant", disabled: true
+    config.vm.synced_folder ".", "/root/share", owner: "root", group: "root", type: "rsync"
+
+    config.vm.provider "virtualbox" do |vb|
+        vb.gui = false
+    end
+end
