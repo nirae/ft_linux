@@ -21,3 +21,6 @@ lfs-ssh:
 
 ssh:
 	sshpass -p 'toor' ssh root@localhost -p 2222
+
+scp-correction:
+	sshpass -p 'toor' scp -P 2222 correction_scripts/* root@localhost:/root
