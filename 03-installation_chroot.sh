@@ -27,11 +27,3 @@ chroot "$LFS" /usr/bin/env -i   \
     PATH=/bin:/usr/bin:/sbin:/usr/sbin \
     /bin/bash --login +h < /vagrant/in_chroot_scripts/compile_packages.sh
 
-# printf "${GREEN}cleaning in the chroot${NC}\n"
-
-# chroot "$LFS" /usr/bin/env -i          \
-#     HOME=/root TERM="$TERM"            \
-#     PS1='(lfs chroot) \u:\w\$ '        \
-#     PATH=/bin:/usr/bin:/sbin:/usr/sbin \
-#     /bin/bash --login < /vagrant/in_chroot_scripts/clean_packages.sh
-

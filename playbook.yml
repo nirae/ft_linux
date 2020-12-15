@@ -67,6 +67,7 @@
     - name: Create the user lfs
       user:
         name: lfs
+        # lfs
         password: "$6$LZzqIKI.cCXW.FHQ$ZomQUgjEi.lJ5Ih9blph2Aau3D3gQuYF9YPyDL3LoY/hJlaxwCsl74pwRKLyoWZWpv947mduPGcUdZgwlMeTT."
         group: lfs
         shell: "/bin/bash"
@@ -241,11 +242,3 @@
         group: lfs
         owner: lfs
       with_items: [bin, etc, lib, lib64, sbin, usr, var, tools]
-
-    - name: Create log file on {{ LFS }}
-      file:
-        path: "{{ LFS }}/lfs.log"
-        state: touch
-        mode: u=rwx,g=rwx,o=rwx
-        group: lfs
-        owner: lfs
